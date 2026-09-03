@@ -1,0 +1,705 @@
+openapi: 3.0.3
+info:
+  title: API Gestion Multi-Activités
+  description: >
+    API pour la gestion d'une entreprise multi-activités (Essence, Huîtres,
+    Bateau/Poisson) : ventes, crédits clients, caisse, achats/fournisseurs,
+    comptabilité, RH et actifs. Chaque activité a sa propre caisse et son
+    propre crédit client, jamais mélangés. Un client ne peut avoir qu'un seul
+    emprunt en cours à la fois par activité.
+  version: "2.0.0"
+
+servers:
+  - url: http://localhost:4000/api
+    description: Serveur local de développement
+
+tags:
+  - name: Auth
+  - name: Activités
+  - name: Clients
+  - name: Produits
+  - name: Ventes
+  - name: Crédits
+  - name: Caisse
+  - name: Fournisseurs
+  - name: Achats
+  - name: Comptabilité
+  - name: RH
+  - name: Actifs
+  - name: Reporting
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ============ AUTH ============
+  /auth/inscription:
+    post:
+      tags: [Auth]
+      summary: Créer un compte utilisateur
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom, contact, motDePasse]
+              properties:
+                nom: { type: string, example: "Rama Seck" }
+                contact: { type: string, example: "+221771234567" }
+                motDePasse: { type: string, format: password, minLength: 6 }
+      responses:
+        "201": { description: Utilisateur créé }
+        "409": { description: Contact déjà utilisé }
+
+  /auth/connexion:
+    post:
+      tags: [Auth]
+      summary: Se connecter et obtenir un token JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact, motDePasse]
+              properties:
+                contact: { type: string }
+                motDePasse: { type: string, format: password }
+      responses:
+        "200":
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  utilisateur: { $ref: "#/components/schemas/UtilisateurPublic" }
+        "401": { description: Identifiants invalides }
+
+  # ============ ACTIVITÉS ============
+  /activites:
+    get:
+      tags: [Activités]
+      summary: Lister les activités
+      responses:
+        "200":
+          description: Liste des activités
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Activite" }
+    post:
+      tags: [Activités]
+      summary: Créer une activité
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom, uniteMesure]
+              properties:
+                nom: { type: string, example: "Essence" }
+                uniteMesure: { type: string, example: "litre" }
+      responses:
+        "201": { description: Activité créée }
+
+  /activites/{id}:
+    get:
+      tags: [Activités]
+      summary: Détail d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      responses:
+        "200": { description: Activité }
+
+  # ============ CLIENTS ============
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Lister / rechercher les clients
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Recherche par nom ou contact
+      responses:
+        "200": { description: Liste des clients }
+    post:
+      tags: [Clients]
+      summary: Créer un client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom]
+              properties:
+                nom: { type: string }
+                contact: { type: string }
+      responses:
+        "201": { description: Client créé }
+
+  /clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Détail d'un client
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      responses:
+        "200": { description: Client }
+
+  /clients/{id}/soldes:
+    get:
+      tags: [Clients]
+      summary: Soldes de crédit du client, détaillés par activité
+      description: Un client peut devoir sur plusieurs activités simultanément — les soldes ne sont jamais fusionnés.
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      responses:
+        "200":
+          description: Liste des soldes par activité
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    activiteId: { type: string, format: uuid }
+                    activite: { type: string }
+                    montantRestant: { type: number }
+                    dateEmprunt: { type: string, format: date-time }
+
+  # ============ PRODUITS ============
+  /produits:
+    get:
+      tags: [Produits]
+      summary: Lister les produits d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des produits }
+    post:
+      tags: [Produits]
+      summary: Créer un produit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreerProduitInput" }
+      responses:
+        "201": { description: Produit créé }
+
+  /produits/alertes:
+    get:
+      tags: [Produits]
+      summary: Produits dont le stock est sous le seuil d'alerte
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des produits en alerte }
+
+  /produits/{id}/stock:
+    patch:
+      tags: [Produits]
+      summary: Ajuster le stock (entrée manuelle, perte, casse)
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delta, motif]
+              properties:
+                delta: { type: number, description: "Positif = entrée, négatif = sortie/perte" }
+                motif: { type: string }
+      responses:
+        "200": { description: Stock mis à jour }
+
+  # ============ VENTES ============
+  /ventes:
+    get:
+      tags: [Ventes]
+      summary: Lister les ventes d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des ventes }
+    post:
+      tags: [Ventes]
+      summary: Créer une vente (comptant ou crédit)
+      description: >
+        En mode CREDIT, la création échoue avec 409 si le client a déjà un
+        emprunt EN_COURS sur cette activité (règle métier appliquée dans une
+        transaction Prisma, doublée d'une contrainte SQL en base).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreerVenteInput" }
+      responses:
+        "201":
+          description: Vente créée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vente" }
+        "409": { description: Emprunt déjà en cours sur cette activité }
+
+  # ============ CRÉDITS ============
+  /credits/remboursements:
+    post:
+      tags: [Crédits]
+      summary: Enregistrer un remboursement (partiel ou total)
+      description: Passe automatiquement le crédit à SOLDE si le solde restant atteint zéro, ce qui débloque un nouvel emprunt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [creditId, montant]
+              properties:
+                creditId: { type: string, format: uuid }
+                montant: { type: number }
+      responses:
+        "201": { description: Remboursement enregistré }
+        "400": { description: Montant supérieur au solde restant }
+
+  /credits/en-retard:
+    get:
+      tags: [Crédits]
+      summary: Lister les créances en cours, triées par ancienneté
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQueryOptional" }
+      responses:
+        "200": { description: Liste des créances }
+
+  /credits/client/{clientId}:
+    get:
+      tags: [Crédits]
+      summary: Historique complet des crédits d'un client, toutes activités confondues
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Liste des crédits }
+
+  # ============ CAISSE ============
+  /caisse/mouvements:
+    get:
+      tags: [Caisse]
+      summary: Lister les mouvements de caisse d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: Liste des mouvements }
+    post:
+      tags: [Caisse]
+      summary: Enregistrer une entrée ou sortie manuelle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activiteId, type, montant, motif]
+              properties:
+                activiteId: { type: string, format: uuid }
+                type: { type: string, enum: [ENTREE, SORTIE] }
+                montant: { type: number }
+                motif: { type: string }
+      responses:
+        "201": { description: Mouvement créé }
+
+  /caisse/solde:
+    get:
+      tags: [Caisse]
+      summary: Solde de caisse en temps réel d'une activité (jamais mélangé)
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200":
+          description: Solde actuel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activiteId: { type: string, format: uuid }
+                  solde: { type: number }
+
+  # ============ FOURNISSEURS ============
+  /fournisseurs:
+    get:
+      tags: [Fournisseurs]
+      summary: Lister les fournisseurs
+      responses:
+        "200": { description: Liste des fournisseurs }
+    post:
+      tags: [Fournisseurs]
+      summary: Créer un fournisseur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom]
+              properties:
+                nom: { type: string }
+                contact: { type: string }
+      responses:
+        "201": { description: Fournisseur créé }
+
+  # ============ ACHATS ============
+  /achats/bons-commande:
+    get:
+      tags: [Achats]
+      summary: Lister les bons de commande d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des bons de commande }
+    post:
+      tags: [Achats]
+      summary: Créer un bon de commande
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activiteId, fournisseurId, lignes]
+              properties:
+                activiteId: { type: string, format: uuid }
+                fournisseurId: { type: string, format: uuid }
+                lignes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [produitId, quantite, prixUnitaire]
+                    properties:
+                      produitId: { type: string, format: uuid }
+                      quantite: { type: number }
+                      prixUnitaire: { type: number }
+      responses:
+        "201": { description: Bon de commande créé (statut BROUILLON) }
+
+  /achats/bons-commande/{id}/reception:
+    post:
+      tags: [Achats]
+      summary: Réceptionner un bon de commande
+      description: Incrémente le stock de chaque produit commandé et génère automatiquement la facture fournisseur.
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      responses:
+        "200": { description: Réception enregistrée, facture générée }
+        "400": { description: Bon déjà réceptionné }
+
+  /achats/factures/{id}/paiements:
+    post:
+      tags: [Achats]
+      summary: Enregistrer un paiement sur une facture fournisseur
+      description: Le paiement sort de la caisse de l'activité indiquée.
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [montant, activiteId]
+              properties:
+                montant: { type: number }
+                activiteId: { type: string, format: uuid }
+      responses:
+        "201": { description: Paiement enregistré }
+        "400": { description: Montant supérieur au solde de la facture }
+
+  # ============ COMPTABILITÉ ============
+  /comptabilite/comptes:
+    get:
+      tags: [Comptabilité]
+      summary: Lister le plan comptable
+      responses:
+        "200": { description: Liste des comptes }
+    post:
+      tags: [Comptabilité]
+      summary: Créer un compte comptable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, libelle, type]
+              properties:
+                code: { type: string, example: "701" }
+                libelle: { type: string, example: "Ventes de marchandises" }
+                type: { type: string, enum: [ACTIF, PASSIF, CHARGE, PRODUIT, CAPITAUX] }
+      responses:
+        "201": { description: Compte créé }
+
+  /comptabilite/ecritures:
+    get:
+      tags: [Comptabilité]
+      summary: Journal comptable d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des écritures }
+    post:
+      tags: [Comptabilité]
+      summary: Créer une écriture comptable
+      description: La somme des lignes DEBIT doit être égale à la somme des lignes CREDIT, sinon 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activiteId, journal, libelle, lignes]
+              properties:
+                activiteId: { type: string, format: uuid }
+                journal: { type: string, example: "VENTES" }
+                libelle: { type: string }
+                reference: { type: string }
+                lignes:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    required: [compteId, sens, montant]
+                    properties:
+                      compteId: { type: string, format: uuid }
+                      sens: { type: string, enum: [DEBIT, CREDIT] }
+                      montant: { type: number }
+      responses:
+        "201": { description: Écriture créée }
+        "400": { description: Écriture non équilibrée }
+
+  /comptabilite/bilan:
+    get:
+      tags: [Comptabilité]
+      summary: Bilan simplifié, par activité ou consolidé
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQueryOptional" }
+      responses:
+        "200": { description: Totaux par type de compte }
+
+  # ============ RH ============
+  /rh/employes:
+    get:
+      tags: [RH]
+      summary: Lister les employés d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des employés }
+    post:
+      tags: [RH]
+      summary: Créer un employé
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activiteId, nom, poste, salaireBase]
+              properties:
+                activiteId: { type: string, format: uuid }
+                nom: { type: string }
+                poste: { type: string }
+                salaireBase: { type: number }
+                contact: { type: string }
+      responses:
+        "201": { description: Employé créé }
+
+  /rh/employes/{id}/presences:
+    post:
+      tags: [RH]
+      summary: Enregistrer la présence d'un employé pour une date donnée
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, present]
+              properties:
+                date: { type: string, format: date }
+                present: { type: boolean }
+                heures: { type: number, default: 0 }
+      responses:
+        "201": { description: Présence enregistrée }
+
+  /rh/bulletins:
+    post:
+      tags: [RH]
+      summary: Générer un bulletin de salaire mensuel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeId, mois, annee]
+              properties:
+                employeId: { type: string, format: uuid }
+                mois: { type: integer, minimum: 1, maximum: 12 }
+                annee: { type: integer }
+                deductions: { type: number }
+      responses:
+        "201": { description: Bulletin généré }
+        "409": { description: Bulletin déjà existant pour cette période }
+
+  # ============ ACTIFS ============
+  /actifs:
+    get:
+      tags: [Actifs]
+      summary: Lister les actifs/immobilisations d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+      responses:
+        "200": { description: Liste des actifs }
+    post:
+      tags: [Actifs]
+      summary: Enregistrer un nouvel actif
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activiteId, nom, valeurAcquisition, dateAcquisition, dureeAmortissement]
+              properties:
+                activiteId: { type: string, format: uuid }
+                nom: { type: string, example: "Bateau" }
+                valeurAcquisition: { type: number }
+                dateAcquisition: { type: string, format: date }
+                dureeAmortissement: { type: integer, description: "en mois" }
+      responses:
+        "201": { description: Actif créé }
+
+  /actifs/{id}/valeur-nette:
+    get:
+      tags: [Actifs]
+      summary: Valeur nette comptable actuelle (amortissement linéaire)
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+      responses:
+        "200": { description: Valeur nette comptable }
+
+  # ============ REPORTING ============
+  /reporting/journalier:
+    get:
+      tags: [Reporting]
+      summary: Rapport journalier d'une activité
+      parameters:
+        - { $ref: "#/components/parameters/activiteIdQuery" }
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: Rapport journalier }
+
+  /reporting/consolide:
+    get:
+      tags: [Reporting]
+      summary: Rapport consolidé des trois activités (lecture seule)
+      description: Agrège les soldes de caisse et créances par activité, sans jamais fusionner les fonds.
+      responses:
+        "200": { description: Rapport consolidé }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    activiteIdQuery:
+      name: activiteId
+      in: query
+      required: true
+      schema: { type: string, format: uuid }
+    activiteIdQueryOptional:
+      name: activiteId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+
+  schemas:
+    UtilisateurPublic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nom: { type: string }
+        role: { type: string }
+
+    Activite:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nom: { type: string }
+        uniteMesure: { type: string }
+
+    CreerProduitInput:
+      type: object
+      required: [activiteId, nom, prixUnitaire]
+      properties:
+        activiteId: { type: string, format: uuid }
+        nom: { type: string }
+        prixUnitaire: { type: number }
+        quantiteStock: { type: number }
+        seuilAlerte: { type: number }
+
+    CreerVenteInput:
+      type: object
+      required: [activiteId, clientId, produitId, quantite, montant, modePaiement]
+      properties:
+        activiteId: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        produitId: { type: string, format: uuid }
+        quantite: { type: number }
+        montant: { type: number }
+        modePaiement: { type: string, enum: [COMPTANT, CREDIT] }
+
+    Vente:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        activiteId: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        produitId: { type: string, format: uuid }
+        quantite: { type: number }
+        montant: { type: number }
+        modePaiement: { type: string, enum: [COMPTANT, CREDIT] }
+        date: { type: string, format: date-time }

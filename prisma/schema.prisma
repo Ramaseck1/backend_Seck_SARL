@@ -1,0 +1,464 @@
+// ============================================================
+// Schéma Prisma — Gestion multi-activités (V1 + V2 combinées)
+// Essence / Huîtres / Bateau-Poisson
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+ }
+
+// ================= ENUMS =================
+
+enum Role {
+  ADMIN
+  GERANT
+  CAISSIER
+  COMPTABLE
+}
+
+enum ModePaiement {
+  COMPTANT
+  CREDIT
+}
+
+enum StatutCredit {
+  EN_COURS
+  SOLDE
+}
+
+enum TypeMouvement {
+  ENTREE
+  SORTIE
+}
+
+enum StatutBonCommande {
+  BROUILLON
+  ENVOYE
+  RECU
+  ANNULE
+}
+
+enum StatutFactureFournisseur {
+  EN_ATTENTE
+  PARTIELLE
+  PAYEE
+}
+
+enum TypeCompteComptable {
+  ACTIF
+  PASSIF
+  CHARGE
+  PRODUIT
+  CAPITAUX
+}
+
+enum SensEcriture {
+  DEBIT
+  CREDIT
+}
+
+enum StatutEmploye {
+  ACTIF
+  INACTIF
+}
+
+// ================= NOYAU : ACTIVITÉ / UTILISATEUR / CLIENT =================
+
+model Activite {
+  id          String   @id @default(uuid())
+  nom         String  // "Essence" | "Huîtres" | "Bateau-Poisson"
+  uniteMesure String   // "litre" | "kg" | "unite"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  utilisateurs     UtilisateurActivite[]
+  produits         Produit[]
+  ventes           Vente[]
+  credits          Credit[]
+  mouvementsCaisse MouvementCaisse[]
+  bonsCommande     BonCommande[]
+  ecritures        EcritureComptable[]
+  employes         Employe[]
+  actifs           Actif[]
+
+  @@map("activites")
+}
+
+model Utilisateur {
+  id             String   @id @default(uuid())
+  nom            String
+  contact        String   @unique
+  motDePasseHash String
+  roleGlobal     Role     @default(GERANT)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  activites            UtilisateurActivite[]
+  ventesSaisies        Vente[]           @relation("VenteSaisiePar")
+  remboursementsSaisis Remboursement[]   @relation("RemboursementSaisiPar")
+  mouvementsSaisis     MouvementCaisse[] @relation("MouvementSaisiPar")
+  ecrituresSaisies     EcritureComptable[] @relation("EcritureSaisiePar")
+  auditLogs            AuditLog[]
+
+  @@map("utilisateurs")
+}
+
+model UtilisateurActivite {
+  id            String      @id @default(uuid())
+  utilisateurId String
+  activiteId    String
+  role          Role
+
+  utilisateur Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  activite    Activite    @relation(fields: [activiteId], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateurId, activiteId])
+  @@map("utilisateur_activites")
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  nom       String   @unique
+  contact   String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ventes  Vente[]
+  credits Credit[]
+
+  @@map("clients")
+}
+
+model AchatProduit {
+  id           String   @id @default(uuid())
+  produitId    String
+  quantite     Decimal
+  prixUnitaire Decimal
+  montantTotal Decimal
+  date         DateTime @default(now())
+  motif        String?
+
+  produit Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
+
+  @@index([produitId, date])
+  @@map("achats_produit")
+}
+// ================= PRODUITS / STOCK =================
+
+model Produit {
+  id                  String   @id @default(uuid())
+  activiteId          String
+
+  nom                 String?
+  numeroSession       Int 
+
+  // STOCK
+  quantiteStock       Decimal  @default(0)
+  quantiteInitiale    Decimal  @default(0)
+
+  // ACHAT / INVESTISSEMENT
+  prixAchatUnitaire   Decimal  @default(0)
+  totalInvesti        Decimal  @default(0)
+  dateAchat           DateTime @default(now())
+
+  // VENTE
+  prixUnitaire        Decimal
+
+  // SESSION
+  dateFinSession      DateTime?
+  sessionTerminee     Boolean  @default(false)
+
+  // ALERTE
+  seuilAlerte         Decimal  @default(0)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  activite             Activite           @relation(fields: [activiteId], references: [id])
+  ventes               Vente[]
+  lignesBonCommande    LigneBonCommande[]
+  achats               AchatProduit[]
+  @@unique([activiteId, numeroSession])  // ← garantit l'unicité par activité
+
+
+  @@map("produits")
+}
+// ================= VENTES =================
+
+model Vente {
+  id           String       @id @default(uuid())
+  activiteId   String
+  clientId     String
+  produitId    String
+  saisiParId   String
+  quantite     Decimal
+  montant      Decimal
+  modePaiement ModePaiement
+  date         DateTime     @default(now())
+
+  activite Activite    @relation(fields: [activiteId], references: [id])
+  client   Client      @relation(fields: [clientId], references: [id])
+  produit  Produit     @relation(fields: [produitId], references: [id])
+  saisiPar Utilisateur @relation("VenteSaisiePar", fields: [saisiParId], references: [id])
+
+  credit          Credit?
+  mouvementCaisse MouvementCaisse?
+
+  @@index([activiteId, clientId])
+  @@map("ventes")
+}
+
+// ================= CRÉDIT CLIENT =================
+
+model Credit {
+  id               String       @id @default(uuid())
+  clientId         String
+  activiteId       String
+  venteId          String?      @unique
+  montantInitial   Decimal
+  montantRembourse Decimal      @default(0)
+  montantRestant   Decimal
+  statut           StatutCredit @default(EN_COURS)
+  dateEmprunt      DateTime     @default(now())
+  dateSolde        DateTime?
+
+  client         Client          @relation(fields: [clientId], references: [id])
+  activite       Activite        @relation(fields: [activiteId], references: [id])
+  vente          Vente?          @relation(fields: [venteId], references: [id])
+  remboursements Remboursement[]
+
+  // Contrainte "un seul crédit EN_COURS par (clientId, activiteId)" ajoutée
+  // via migration SQL manuelle (index unique partiel) — voir prisma/manual-constraints.sql
+  @@index([clientId, activiteId, statut])
+  @@map("credits")
+}
+
+model Remboursement {
+  id         String   @id @default(uuid())
+  creditId   String
+  saisiParId String
+  montant    Decimal
+  date       DateTime @default(now())
+
+  credit   Credit      @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  saisiPar Utilisateur @relation("RemboursementSaisiPar", fields: [saisiParId], references: [id])
+
+  @@index([creditId])
+  @@map("remboursements")
+}
+
+// ================= CAISSE =================
+
+model MouvementCaisse {
+  id         String        @id @default(uuid())
+  activiteId String
+  venteId    String?       @unique
+  saisiParId String
+  type       TypeMouvement
+  montant    Decimal
+  motif      String
+  date       DateTime      @default(now())
+
+  activite Activite    @relation(fields: [activiteId], references: [id])
+  vente    Vente?      @relation(fields: [venteId], references: [id])
+  saisiPar Utilisateur @relation("MouvementSaisiPar", fields: [saisiParId], references: [id])
+
+  @@index([activiteId, date])
+  @@map("mouvements_caisse")
+}
+
+// ================= V2 : ACHATS & FOURNISSEURS =================
+
+model Fournisseur {
+  id        String   @id @default(uuid())
+  nom       String
+  contact   String?
+  createdAt DateTime @default(now())
+
+  bonsCommande BonCommande[]
+
+  @@map("fournisseurs")
+}
+
+model BonCommande {
+  id             String            @id @default(uuid())
+  activiteId     String
+  fournisseurId  String
+  statut         StatutBonCommande @default(BROUILLON)
+  dateCommande   DateTime          @default(now())
+  dateReception  DateTime?
+
+  activite    Activite           @relation(fields: [activiteId], references: [id])
+  fournisseur Fournisseur        @relation(fields: [fournisseurId], references: [id])
+  lignes      LigneBonCommande[]
+  facture     FactureFournisseur?
+
+  @@index([activiteId, fournisseurId])
+  @@map("bons_commande")
+}
+
+model LigneBonCommande {
+  id            String  @id @default(uuid())
+  bonCommandeId String
+  produitId     String
+  quantite      Decimal
+  prixUnitaire  Decimal
+
+  bonCommande BonCommande @relation(fields: [bonCommandeId], references: [id], onDelete: Cascade)
+  produit     Produit     @relation(fields: [produitId], references: [id])
+
+  @@map("lignes_bon_commande")
+}
+
+model FactureFournisseur {
+  id            String                   @id @default(uuid())
+  bonCommandeId String                   @unique
+  montant       Decimal
+  montantPaye   Decimal                  @default(0)
+  statut        StatutFactureFournisseur @default(EN_ATTENTE)
+  dateEcheance  DateTime?
+  createdAt     DateTime                 @default(now())
+
+  bonCommande BonCommande            @relation(fields: [bonCommandeId], references: [id])
+  paiements   PaiementFournisseur[]
+
+  @@map("factures_fournisseur")
+}
+
+model PaiementFournisseur {
+  id        String   @id @default(uuid())
+  factureId String
+  montant   Decimal
+  date      DateTime @default(now())
+
+  facture FactureFournisseur @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  @@map("paiements_fournisseur")
+}
+
+// ================= V2 : COMPTABILITÉ GÉNÉRALE =================
+
+model CompteComptable {
+  id      String              @id @default(uuid())
+  code    String              @unique // ex: "701", "607", "512"
+  libelle String
+  type    TypeCompteComptable
+
+  lignes LigneEcriture[]
+
+  @@map("comptes_comptables")
+}
+
+model EcritureComptable {
+  id         String   @id @default(uuid())
+  activiteId String
+  journal    String   // "VENTES" | "ACHATS" | "CAISSE" | "OD"
+  reference  String?
+  libelle    String
+  date       DateTime @default(now())
+  saisiParId String
+
+  activite Activite        @relation(fields: [activiteId], references: [id])
+  saisiPar Utilisateur     @relation("EcritureSaisiePar", fields: [saisiParId], references: [id])
+  lignes   LigneEcriture[]
+
+  @@index([activiteId, date])
+  @@map("ecritures_comptables")
+}
+
+model LigneEcriture {
+  id         String       @id @default(uuid())
+  ecritureId String
+  compteId   String
+  sens       SensEcriture
+  montant    Decimal
+
+  ecriture EcritureComptable @relation(fields: [ecritureId], references: [id], onDelete: Cascade)
+  compte   CompteComptable   @relation(fields: [compteId], references: [id])
+
+  @@map("lignes_ecriture")
+}
+
+// ================= V2 : RH & PAIE =================
+
+model Employe {
+  id          String        @id @default(uuid())
+  activiteId  String
+  nom         String
+  contact     String?
+  poste       String
+  salaireBase Decimal
+  statut      StatutEmploye @default(ACTIF)
+  dateEmbauche DateTime     @default(now())
+
+  activite   Activite    @relation(fields: [activiteId], references: [id])
+  presences  Presence[]
+  bulletins  Bulletin[]
+
+  @@map("employes")
+}
+
+model Presence {
+  id        String   @id @default(uuid())
+  employeId String
+  date      DateTime
+  present   Boolean  @default(true)
+  heures    Decimal  @default(0)
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeId, date])
+  @@map("presences")
+}
+
+model Bulletin {
+  id            String   @id @default(uuid())
+  employeId     String
+  mois          Int
+  annee         Int
+  montantBrut   Decimal
+  deductions    Decimal  @default(0)
+  montantNet    Decimal
+  dateEmission  DateTime @default(now())
+
+  employe Employe @relation(fields: [employeId], references: [id])
+
+  @@unique([employeId, mois, annee])
+  @@map("bulletins")
+}
+
+// ================= V2 : ACTIFS / IMMOBILISATIONS =================
+
+model Actif {
+  id                  String   @id @default(uuid())
+  activiteId          String
+  nom                 String   // ex: "Bateau", "Cuve essence"
+  valeurAcquisition   Decimal
+  dateAcquisition     DateTime
+  dureeAmortissement  Int      // en mois
+
+  activite Activite @relation(fields: [activiteId], references: [id])
+
+  @@map("actifs")
+}
+
+// ================= AUDIT (transversal, utile dès V1) =================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  utilisateurId String
+  action        String   // ex: "CREATION_VENTE", "REMBOURSEMENT"
+  entite        String   // ex: "Vente", "Credit"
+  entiteId      String
+  details       Json?
+  date          DateTime @default(now())
+
+  utilisateur Utilisateur @relation(fields: [utilisateurId], references: [id])
+
+  @@index([entite, entiteId])
+  @@map("audit_logs")
+}
