@@ -385,6 +385,7 @@ export function listerVentes(
     include: {
       client: true,
       produit: true,
+      activite:true
     },
   });
 }

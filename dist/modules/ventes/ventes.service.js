@@ -214,6 +214,7 @@ function listerVentes(activiteId, clientId) {
         include: {
             client: true,
             produit: true,
+            activite: true
         },
     });
 }
