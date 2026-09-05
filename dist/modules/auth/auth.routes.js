@@ -11,5 +11,6 @@ router.post("/pin/definir", auth_1.requireAuth, pin_controller_1.definir);
 router.post("/pin/verifier", auth_1.requireAuth, pin_controller_1.verifier);
 router.put("/pin/modifier", auth_1.requireAuth, pin_controller_1.modifier);
 router.post("/pin/reinitialiser", auth_1.requireAuth, pin_controller_1.reinitialiser);
+router.post("/deconnexion", auth_1.requireAuth, auth_controller_1.deconnexion);
 exports.default = router;
 //# sourceMappingURL=auth.routes.js.map

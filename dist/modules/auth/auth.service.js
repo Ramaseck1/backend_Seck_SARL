@@ -5,17 +5,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.inscrire = inscrire;
 exports.connecter = connecter;
+exports.deconnecter = deconnecter;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = require("../../lib/prisma");
 const errorHandler_1 = require("../../middlewares/errorHandler");
-async function inscrire(nom, contact, motDePasse) {
+const ROLES_VALIDES = ["ADMIN", "GERANT", "CAISSIER", "COMPTABLE"];
+async function inscrire(nom, contact, motDePasse, role) {
     const existant = await prisma_1.prisma.utilisateur.findUnique({ where: { contact } });
     if (existant)
         throw new errorHandler_1.AppError("Un utilisateur avec ce contact existe déjà", 409);
     const motDePasseHash = await bcrypt_1.default.hash(motDePasse, 10);
     const utilisateur = await prisma_1.prisma.utilisateur.create({
-        data: { nom, contact, motDePasseHash },
+        data: { nom, contact, motDePasseHash, roleGlobal: role },
     });
     return { id: utilisateur.id, nom: utilisateur.nom, contact: utilisateur.contact };
 }
@@ -29,7 +31,7 @@ async function connecter(contact, motDePasse) {
     const options = {
         expiresIn: (process.env.JWT_EXPIRES_IN || "7d"),
     };
-    const token = jsonwebtoken_1.default.sign({ id: utilisateur.id, roleGlobal: utilisateur.roleGlobal }, process.env.JWT_SECRET, options);
+    const token = jsonwebtoken_1.default.sign({ id: utilisateur.id, roleGlobal: utilisateur.roleGlobal, tokenVersion: utilisateur.tokenVersion }, process.env.JWT_SECRET, options);
     return {
         token,
         utilisateur: {
@@ -39,5 +41,11 @@ async function connecter(contact, motDePasse) {
             pinConfigure: !!utilisateur.codePinHash, // ← ajouté
         },
     };
+}
+async function deconnecter(userId) {
+    await prisma_1.prisma.utilisateur.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+    });
 }
 //# sourceMappingURL=auth.service.js.map

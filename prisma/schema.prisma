@@ -107,6 +107,7 @@ model Utilisateur {
   mouvementsSaisis     MouvementCaisse[] @relation("MouvementSaisiPar")
   ecrituresSaisies     EcritureComptable[] @relation("EcritureSaisiePar")
   auditLogs            AuditLog[]
+  tokenVersion Int @default(0)
 
   @@map("utilisateurs")
 }
