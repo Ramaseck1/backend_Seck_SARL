@@ -125,6 +125,9 @@ export async function listerProduits(
        numeroSession: "desc"
       },
     ],
+    include: {
+       activite:true
+    },
   });
 }
 
