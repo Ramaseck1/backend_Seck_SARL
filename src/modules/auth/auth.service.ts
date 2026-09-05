@@ -30,5 +30,12 @@ export async function connecter(contact: string, motDePasse: string) {
     options
   );
 
-  return { token, utilisateur: { id: utilisateur.id, nom: utilisateur.nom, role: utilisateur.roleGlobal } };
-}
+  return {
+    token,
+    utilisateur: {
+      id: utilisateur.id,
+      nom: utilisateur.nom,
+      role: utilisateur.roleGlobal,
+      pinConfigure: !!utilisateur.codePinHash, // ← ajouté
+    },
+  };}

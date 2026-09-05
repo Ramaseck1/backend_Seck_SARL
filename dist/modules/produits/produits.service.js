@@ -72,6 +72,9 @@ async function listerProduits(activiteId) {
                 numeroSession: "desc"
             },
         ],
+        include: {
+            activite: true
+        },
     });
 }
 /**

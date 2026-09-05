@@ -30,6 +30,14 @@ async function connecter(contact, motDePasse) {
         expiresIn: (process.env.JWT_EXPIRES_IN || "7d"),
     };
     const token = jsonwebtoken_1.default.sign({ id: utilisateur.id, roleGlobal: utilisateur.roleGlobal }, process.env.JWT_SECRET, options);
-    return { token, utilisateur: { id: utilisateur.id, nom: utilisateur.nom, role: utilisateur.roleGlobal } };
+    return {
+        token,
+        utilisateur: {
+            id: utilisateur.id,
+            nom: utilisateur.nom,
+            role: utilisateur.roleGlobal,
+            pinConfigure: !!utilisateur.codePinHash, // ← ajouté
+        },
+    };
 }
 //# sourceMappingURL=auth.service.js.map
