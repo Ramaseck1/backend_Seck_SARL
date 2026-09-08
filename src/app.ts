@@ -17,6 +17,7 @@ import produitsRoutes from "./modules/produits/produits.routes";
 import reportingRoutes from "./modules/reporting/reporting.routes";
 import rhRoutes from "./modules/rh/rh.routes";
 import ventesRoutes from "./modules/ventes/ventes.routes";
+import financementRouter from "./modules/finances/financement.router";
 import currencyRoutes from "./modules/currency/currency.routes";
 
 import { errorHandler } from "./middlewares/errorHandler";
@@ -40,6 +41,7 @@ app.use("/api/ventes", ventesRoutes);
 app.use("/api/credits", creditsRoutes);
 app.use("/api/caisse", caisseRoutes);
 app.use("/api/currency", currencyRoutes);
+app.use("/financements", financementRouter)
 
 // ---- V2 : comptabilité, achats, RH, actifs ----
 app.use("/api/fournisseurs", fournisseursRoutes);

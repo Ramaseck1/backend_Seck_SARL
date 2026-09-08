@@ -85,6 +85,8 @@ model Activite {
   ecritures        EcritureComptable[]
   employes         Employe[]
   actifs           Actif[]
+  financements Financement[]
+
 
   @@map("activites")
 }
@@ -108,6 +110,8 @@ model Utilisateur {
   ecrituresSaisies     EcritureComptable[] @relation("EcritureSaisiePar")
   auditLogs            AuditLog[]
   tokenVersion Int @default(0)
+  financementsSaisis              Financement[]              @relation("FinancementSaisiPar")
+  remboursementsFinancementSaisis RemboursementFinancement[]  @relation("RembFinancementSaisiPar")
 
   @@map("utilisateurs")
 }
@@ -242,6 +246,8 @@ model Credit {
   @@map("credits")
 }
 
+
+
 model Remboursement {
   id         String   @id @default(uuid())
   creditId   String
@@ -263,6 +269,8 @@ model MouvementCaisse {
   activiteId String
   venteId    String?       @unique
   saisiParId String
+  categorie String? // "FINANCEMENT" pour badge dans la liste caisse
+
   type       TypeMouvement
   montant    Decimal
   motif      String
@@ -272,8 +280,59 @@ model MouvementCaisse {
   vente    Vente?      @relation(fields: [venteId], references: [id])
   saisiPar Utilisateur @relation("MouvementSaisiPar", fields: [saisiParId], references: [id])
 
+  financement             Financement?
+  remboursementFinancement RemboursementFinancement?
+
   @@index([activiteId, date])
   @@map("mouvements_caisse")
+}
+
+enum StatutFinancement {
+  NON_PAYE
+  PAYE
+}
+
+// ================= FINANCEMENT CLIENT =================
+
+model Financement {
+  id               String            @id @default(uuid())
+  activiteId       String
+  nom              String
+  prenom           String
+  telephone        String
+  montant          Decimal
+  montantRembourse Decimal           @default(0)
+  montantRestant   Decimal
+  statut           StatutFinancement @default(NON_PAYE)
+  mouvementCaisseId String?          @unique
+  saisiParId       String
+  date             DateTime          @default(now())
+  dateSolde        DateTime?
+
+  activite        Activite         @relation(fields: [activiteId], references: [id])
+  saisiPar        Utilisateur      @relation("FinancementSaisiPar", fields: [saisiParId], references: [id])
+  mouvementCaisse MouvementCaisse? @relation(fields: [mouvementCaisseId], references: [id])
+  remboursements  RemboursementFinancement[]
+
+  @@index([activiteId, statut])
+  @@map("financements")
+}
+
+model RemboursementFinancement {
+  id                String   @id @default(uuid())
+  financementId     String
+  saisiParId        String
+  montant           Decimal
+  typePaiement      String   // "COMPLET" | "PARTIEL"
+  mouvementCaisseId String?  @unique
+  date              DateTime @default(now())
+
+  financement     Financement      @relation(fields: [financementId], references: [id], onDelete: Cascade)
+  saisiPar        Utilisateur      @relation("RembFinancementSaisiPar", fields: [saisiParId], references: [id])
+  mouvementCaisse MouvementCaisse? @relation(fields: [mouvementCaisseId], references: [id])
+
+  @@index([financementId])
+  @@map("remboursements_financement")
 }
 
 // ================= V2 : ACHATS & FOURNISSEURS =================

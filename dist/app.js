@@ -22,6 +22,7 @@ const produits_routes_1 = __importDefault(require("./modules/produits/produits.r
 const reporting_routes_1 = __importDefault(require("./modules/reporting/reporting.routes"));
 const rh_routes_1 = __importDefault(require("./modules/rh/rh.routes"));
 const ventes_routes_1 = __importDefault(require("./modules/ventes/ventes.routes"));
+const financement_router_1 = __importDefault(require("./modules/finances/financement.router"));
 const currency_routes_1 = __importDefault(require("./modules/currency/currency.routes"));
 const errorHandler_1 = require("./middlewares/errorHandler");
 exports.app = (0, express_1.default)();
@@ -40,6 +41,7 @@ exports.app.use("/api/ventes", ventes_routes_1.default);
 exports.app.use("/api/credits", credits_routes_1.default);
 exports.app.use("/api/caisse", caisse_routes_1.default);
 exports.app.use("/api/currency", currency_routes_1.default);
+exports.app.use("/financements", financement_router_1.default);
 // ---- V2 : comptabilité, achats, RH, actifs ----
 exports.app.use("/api/fournisseurs", fournisseurs_routes_1.default);
 exports.app.use("/api/achats", achats_routes_1.default);
