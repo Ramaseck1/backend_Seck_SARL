@@ -41,7 +41,7 @@ exports.app.use("/api/ventes", ventes_routes_1.default);
 exports.app.use("/api/credits", credits_routes_1.default);
 exports.app.use("/api/caisse", caisse_routes_1.default);
 exports.app.use("/api/currency", currency_routes_1.default);
-exports.app.use("/financements", financement_router_1.default);
+exports.app.use("/api/financements", financement_router_1.default);
 // ---- V2 : comptabilité, achats, RH, actifs ----
 exports.app.use("/api/fournisseurs", fournisseurs_routes_1.default);
 exports.app.use("/api/achats", achats_routes_1.default);
