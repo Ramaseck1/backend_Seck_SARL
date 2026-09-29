@@ -75,7 +75,6 @@ model Activite {
   uniteMesure String   // "litre" | "kg" | "unite"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
   utilisateurs     UtilisateurActivite[]
   produits         Produit[]
   ventes           Vente[]
@@ -87,7 +86,7 @@ model Activite {
   actifs           Actif[]
   financements Financement[]
 
-
+  @@index([updatedAt])
   @@map("activites")
 }
 
@@ -188,6 +187,7 @@ model Produit {
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  deletedAt             DateTime?
 
   activite             Activite           @relation(fields: [activiteId], references: [id])
   ventes               Vente[]
@@ -195,7 +195,7 @@ model Produit {
   achats               AchatProduit[]
   @@unique([activiteId, numeroSession])  // ← garantit l'unicité par activité
 
-
+  @@index([updatedAt])
   @@map("produits")
 }
 // ================= VENTES =================
@@ -210,6 +210,9 @@ model Vente {
   montant      Decimal
   modePaiement ModePaiement
   date         DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt             DateTime?
 
   activite Activite    @relation(fields: [activiteId], references: [id])
   client   Client      @relation(fields: [clientId], references: [id])
@@ -218,7 +221,8 @@ model Vente {
 
   credit          Credit?
   mouvementCaisse MouvementCaisse?
-
+  
+  @@index([updatedAt])
   @@index([activiteId, clientId])
   @@map("ventes")
 }
@@ -236,6 +240,8 @@ model Credit {
   statut           StatutCredit @default(EN_COURS)
   dateEmprunt      DateTime     @default(now())
   dateSolde        DateTime?
+  
+  updatedAt        DateTime     @updatedAt
 
   client         Client          @relation(fields: [clientId], references: [id])
   activite       Activite        @relation(fields: [activiteId], references: [id])
@@ -244,6 +250,7 @@ model Credit {
 
   // Contrainte "un seul crédit EN_COURS par (clientId, activiteId)" ajoutée
   // via migration SQL manuelle (index unique partiel) — voir prisma/manual-constraints.sql
+  @@index([updatedAt])
   @@index([clientId, activiteId, statut])
   @@map("credits")
 }
@@ -277,13 +284,18 @@ model MouvementCaisse {
   montant    Decimal
   motif      String
   date       DateTime      @default(now())
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt             DateTime?
 
   activite Activite    @relation(fields: [activiteId], references: [id])
   vente    Vente?      @relation(fields: [venteId], references: [id])
   saisiPar Utilisateur @relation("MouvementSaisiPar", fields: [saisiParId], references: [id])
+  
 
   financement             Financement?
   remboursementFinancement RemboursementFinancement?
+  @@index([updatedAt])
 
   @@index([activiteId, date])
   @@map("mouvements_caisse")
@@ -310,11 +322,16 @@ model Financement {
   saisiParId       String
   date             DateTime          @default(now())
   dateSolde        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt             DateTime?
 
   activite        Activite         @relation(fields: [activiteId], references: [id])
   saisiPar        Utilisateur      @relation("FinancementSaisiPar", fields: [saisiParId], references: [id])
   mouvementCaisse MouvementCaisse? @relation(fields: [mouvementCaisseId], references: [id])
+  
   remboursements  RemboursementFinancement[]
+  @@index([updatedAt])
 
   @@index([activiteId, statut])
   @@map("financements")
