@@ -19,6 +19,8 @@ import rhRoutes from "./modules/rh/rh.routes";
 import ventesRoutes from "./modules/ventes/ventes.routes";
 import financementRoutes from "./modules/finances/financement.router";
 import currencyRoutes from "./modules/currency/currency.routes";
+import syncRouter from './modules/clients/Sync.routes';
+
 
 import { errorHandler } from "./middlewares/errorHandler";
 
@@ -42,6 +44,8 @@ app.use("/api/credits", creditsRoutes);
 app.use("/api/caisse", caisseRoutes);
 app.use("/api/currency", currencyRoutes);
 app.use("/api/financements", financementRoutes)
+   app.use('/api/sync', syncRouter);
+
 
 // ---- V2 : comptabilité, achats, RH, actifs ----
 app.use("/api/fournisseurs", fournisseursRoutes);
