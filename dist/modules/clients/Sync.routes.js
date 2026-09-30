@@ -368,6 +368,7 @@ router.post('/push', async (req, res, next) => {
                 results.push({ opId: o.opId, ok: true });
             }
             catch (e) {
+                console.error('SYNC PUSH ERREUR', o.entity, o.op, e); // ← AJOUTE CETTE LIGNE
                 const msg = messageMetier(e);
                 if (msg === null)
                     throw e; // erreur technique → 500 → le mobile réessaiera
